@@ -1,4 +1,4 @@
-const API_URL = "https://hook.eu1.make.com/ncxl6bbzu2xylfye6y6rwhlmmp13wwvw";
+const API_URL = "/api/movies";
 
 let items = [];
 
@@ -14,6 +14,7 @@ const emptyElement = document.querySelector("#empty");
 const totalCountElement = document.querySelector("#totalCount");
 const remainingCountElement = document.querySelector("#remainingCount");
 
+
 async function loadWatchlist() {
     try {
         const response = await fetch(API_URL);
@@ -24,10 +25,11 @@ async function loadWatchlist() {
 
         items = await response.json();
 
-        // На всякий случай отбрасываем старые пустые записи.
+        // На всякий случай игнорируем некорректные записи.
         items = items.filter(item => item.title);
 
         loadingElement.hidden = true;
+        errorElement.hidden = true;
 
         updateCounters();
         render();
@@ -40,6 +42,49 @@ async function loadWatchlist() {
     }
 }
 
+
+async function setWatched(item, watched, checkbox) {
+    // Пока запрос выполняется, запрещаем повторные клики.
+    checkbox.disabled = true;
+
+    try {
+        const response = await fetch(API_URL, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                id: item.id,
+                watched: watched
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        // Обновляем локальные данные без повторного GET.
+        item.watched = result.watched;
+        item.watchedAt = result.watchedAt;
+
+        updateCounters();
+        render();
+
+    } catch (error) {
+        console.error("Failed to update watched status:", error);
+
+        // Возвращаем чекбокс обратно, если PATCH не прошёл.
+        checkbox.checked = item.watched;
+
+        alert("Не удалось изменить статус просмотра.");
+    } finally {
+        checkbox.disabled = false;
+    }
+}
+
+
 function render() {
     const filteredItems = items.filter(item => {
 
@@ -50,8 +95,8 @@ function render() {
 
         const matchesStatus =
             statusFilter === "all" ||
-            (statusFilter === "watched" && item.Watched === true) ||
-            (statusFilter === "unwatched" && item.Watched !== true);
+            (statusFilter === "watched" && item.watched === true) ||
+            (statusFilter === "unwatched" && item.watched !== true);
 
         const matchesType =
             typeFilter === "all" ||
@@ -69,15 +114,16 @@ function render() {
         const element = document.createElement("article");
 
         element.className =
-            `item ${item.Watched ? "watched" : ""}`;
+            `item ${item.watched ? "watched" : ""}`;
 
         const checkbox = document.createElement("input");
 
         checkbox.type = "checkbox";
-        checkbox.checked = item.Watched === true;
+        checkbox.checked = item.watched === true;
 
-        // Пока read-only.
-        checkbox.disabled = true;
+        checkbox.addEventListener("change", () => {
+            setWatched(item, checkbox.checked, checkbox);
+        });
 
         const info = document.createElement("div");
         info.className = "item-info";
@@ -108,12 +154,14 @@ function render() {
     }
 }
 
+
 function updateCounters() {
     totalCountElement.textContent = items.length;
 
     remainingCountElement.textContent =
-        items.filter(item => item.Watched !== true).length;
+        items.filter(item => item.watched !== true).length;
 }
+
 
 document
     .querySelector("#search")
@@ -123,6 +171,7 @@ document
 
         render();
     });
+
 
 document
     .querySelector("#statusFilters")
@@ -143,6 +192,7 @@ document
         render();
     });
 
+
 document
     .querySelector("#typeFilters")
     .addEventListener("click", event => {
@@ -161,5 +211,6 @@ document
 
         render();
     });
+
 
 loadWatchlist();
