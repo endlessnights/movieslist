@@ -165,6 +165,13 @@ h1 {
     font-size: 14px;
 }
 
+.item-date {
+    margin-top: 4px;
+    color: var(--secondary);
+    font-size: 13px;
+    opacity: 0.8;
+}
+
 .item.watched .item-title {
     color: var(--secondary);
     text-decoration: line-through;

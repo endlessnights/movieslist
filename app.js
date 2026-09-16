@@ -2,7 +2,8 @@ const API_URL = "/api/movies";
 
 let items = [];
 
-let statusFilter = "all";
+// По умолчанию показываем только непросмотренные.
+let statusFilter = "unwatched";
 let typeFilter = "all";
 let searchQuery = "";
 
@@ -25,7 +26,7 @@ async function loadWatchlist() {
 
         items = await response.json();
 
-        // На всякий случай игнорируем некорректные записи.
+        // Игнорируем некорректные записи без названия.
         items = items.filter(item => item.title);
 
         loadingElement.hidden = true;
@@ -79,25 +80,68 @@ async function setWatched(item, watched, checkbox) {
         checkbox.checked = item.watched;
 
         alert("Не удалось изменить статус просмотра.");
+
     } finally {
         checkbox.disabled = false;
     }
 }
 
 
-function formatWatchedDate(dateString) {
+// Форматируем дату:
+// 17 сентября 2026, 00:20
+function formatDate(dateString) {
     if (!dateString) return "";
 
-    const date = new Date(dateString);
+    let normalizedDate = dateString;
 
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
+    /*
+     * watchedAt приходит в ISO:
+     * 2026-09-16T22:20:00.218Z
+     *
+     * createdAt из D1 приходит:
+     * 2026-09-16 22:16:59
+     *
+     * D1 CURRENT_TIMESTAMP хранит UTC,
+     * поэтому превращаем createdAt в корректный ISO UTC.
+     */
+    if (
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateString)
+    ) {
+        normalizedDate = dateString.replace(" ", "T") + "Z";
+    }
+
+    const date = new Date(normalizedDate);
+
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+
+    const months = [
+        "января",
+        "февраля",
+        "марта",
+        "апреля",
+        "мая",
+        "июня",
+        "июля",
+        "августа",
+        "сентября",
+        "октября",
+        "ноября",
+        "декабря"
+    ];
+
+    const day = date.getDate();
+    const month = months[date.getMonth()];
     const year = date.getFullYear();
 
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const hours =
+        String(date.getHours()).padStart(2, "0");
 
-    return `${day}-${month}-${year} ${hours}:${minutes}`;
+    const minutes =
+        String(date.getMinutes()).padStart(2, "0");
+
+    return `${day} ${month} ${year}, ${hours}:${minutes}`;
 }
 
 
@@ -132,23 +176,41 @@ function render() {
         element.className =
             `item ${item.watched ? "watched" : ""}`;
 
+
+        // Checkbox
+
         const checkbox = document.createElement("input");
 
         checkbox.type = "checkbox";
         checkbox.checked = item.watched === true;
 
         checkbox.addEventListener("change", () => {
-            setWatched(item, checkbox.checked, checkbox);
+            setWatched(
+                item,
+                checkbox.checked,
+                checkbox
+            );
         });
+
+
+        // Основная информация
 
         const info = document.createElement("div");
         info.className = "item-info";
 
+
+        // Название
+
         const title = document.createElement("p");
+
         title.className = "item-title";
         title.textContent = item.title;
 
+
+        // Год и тип
+
         const meta = document.createElement("div");
+
         meta.className = "item-meta";
 
         const type =
@@ -163,20 +225,35 @@ function render() {
                 .filter(Boolean)
                 .join(" • ");
 
+
         info.append(title, meta);
 
-        // Показываем дату просмотра только у просмотренных.
+
+        // Дата
+
+        const dateInfo = document.createElement("div");
+        dateInfo.className = "item-date";
+
         if (item.watched && item.watchedAt) {
-            const watchedDate = document.createElement("div");
 
-            watchedDate.className = "watched-date";
-            watchedDate.textContent =
-                `Просмотрено: ${formatWatchedDate(item.watchedAt)}`;
+            dateInfo.textContent =
+                `Просмотрено: ${formatDate(item.watchedAt)}`;
 
-            info.append(watchedDate);
+        } else if (item.createdAt) {
+
+            dateInfo.textContent =
+                `Добавлено: ${formatDate(item.createdAt)}`;
         }
 
-        element.append(checkbox, info);
+        if (dateInfo.textContent) {
+            info.append(dateInfo);
+        }
+
+
+        element.append(
+            checkbox,
+            info
+        );
 
         listElement.append(element);
     }
@@ -184,12 +261,17 @@ function render() {
 
 
 function updateCounters() {
-    totalCountElement.textContent = items.length;
+    totalCountElement.textContent =
+        items.length;
 
     remainingCountElement.textContent =
-        items.filter(item => item.watched !== true).length;
+        items.filter(
+            item => item.watched !== true
+        ).length;
 }
 
+
+// Поиск
 
 document
     .querySelector("#search")
@@ -201,40 +283,54 @@ document
     });
 
 
+// Фильтр по статусу
+
 document
     .querySelector("#statusFilters")
     .addEventListener("click", event => {
 
-        const button = event.target.closest("button");
+        const button =
+            event.target.closest("button");
 
         if (!button) return;
 
-        statusFilter = button.dataset.status;
+        statusFilter =
+            button.dataset.status;
 
         document
             .querySelectorAll("#statusFilters button")
             .forEach(item =>
-                item.classList.toggle("active", item === button)
+                item.classList.toggle(
+                    "active",
+                    item === button
+                )
             );
 
         render();
     });
 
 
+// Фильтр по типу
+
 document
     .querySelector("#typeFilters")
     .addEventListener("click", event => {
 
-        const button = event.target.closest("button");
+        const button =
+            event.target.closest("button");
 
         if (!button) return;
 
-        typeFilter = button.dataset.type;
+        typeFilter =
+            button.dataset.type;
 
         document
             .querySelectorAll("#typeFilters button")
             .forEach(item =>
-                item.classList.toggle("active", item === button)
+                item.classList.toggle(
+                    "active",
+                    item === button
+                )
             );
 
         render();
